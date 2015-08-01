@@ -41,6 +41,7 @@ void adc_init(void)
 	while (ADCSRA & (1<<ADSC) ) {}        // wait to finish
 	// read result 
 	result = ADCW;
+	(void)result;
 };
 //-----------------------------------------------------------
 uint16_t adc_read()

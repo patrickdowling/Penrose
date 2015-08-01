@@ -77,6 +77,8 @@ bit 11-0 D11:D0:DAC Input Data bits. Bit x is ignored.
 */
 void mcp4802_outputData(const uint8_t out1, const uint8_t out2)
 {
+	(void)out2;
+
 	//LDAC HIGH (no dac update, gate low)
 	MCP_CS_PORT |= (1<<MCP_LDAC_PIN);
 	//CS low -> start write cmd
