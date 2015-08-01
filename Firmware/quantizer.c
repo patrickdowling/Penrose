@@ -27,15 +27,15 @@
 #include "IoMatrix.h"
 #include "eeprom.h"
 #include "timebase.h"
+#include <util/atomic.h>
 #include <util/delay.h> 
 #include <avr/interrupt.h>  
 #include <stdlib.h>
 
 //-----------------------------------------------------------
-uint8_t quantizeValue(uint16_t input);
-void gateOut(uint8_t onOff);
-volatile uint8_t lastQuantValue = 0;
-volatile uint8_t gateTimer = 0;
+static uint8_t quantizeValue(uint16_t input);
+static uint16_t lastInput=0;
+static uint8_t lastQuantValue=0;
 //-----------------------------------------------------------
 
 #define TRIGGER_INPUT_PIN		PD7
@@ -54,7 +54,6 @@ volatile uint8_t gateTimer = 0;
 #define VOLT_PER_NOTE			(VOLT_PER_OCTAVE/12.f)  // 0.04166666666666666667
 #define VOLT_PER_ADC_STEP		(INPUT_VOLTAGE/1024.f)  // 0.0048828125
 #define ADC_STEPS_PER_NOTE		(VOLT_PER_NOTE/VOLT_PER_ADC_STEP) //~8.53
-
 
 #define GATE_IN_CONNECTED ((SWITCH_IN_PORT & (1<<SWITCH_PIN))==0)
 //-----------------------------------------------------------
@@ -88,18 +87,24 @@ void init()
 
     PCICR |= (1<<PCIE2);   //Enable PCINT2
     PCMSK2 |= (1<<PCINT23); //Trigger on change of PCINT23 (PD7)
-    
        
     sei();
 }
-//-----------------------&= ------------------------------------
+//-----------------------------------------------------------
 void process()
 {
-	const uint8_t quantValue = quantizeValue(adc_read()+1);
-	//if the value changed
+	const uint16_t input = adc_read()+1;
+
+	if (abs(input-lastInput) < ADC_STEPS_PER_NOTE/2)
+		return;
+
+	const uint8_t quantValue = quantizeValue(input);
+	//if the value changed, update DAC (also sets gate)
 	if(lastQuantValue != quantValue)
 	{
+		lastInput = input;
 		lastQuantValue = quantValue;
+		
 		mcp4802_outputData(quantValue,0);
 		//start gate off timer
 		timer0_start();
@@ -108,28 +113,23 @@ void process()
 //-----------------------------------------------------------
 ISR(PCINT2_vect)
 {
-    if(bit_is_clear(PIND,7)) //only rising edge
-    {
-	process();	
-    }	
-    return;	
+  if(bit_is_clear(PIND,7)) //only rising edge
+  {
+    process();
+  }	
+  return;
 };
 //-----------------------------------------------------------
-static uint8_t lastInput=0;
 uint8_t quantizeValue(uint16_t input)
 {
-  if(io_getActiveSteps()==0)
+  const uint16_t activeSteps = io_getActiveSteps();
+  if(!activeSteps)
   {
     //no stepselected
     io_setCurrentQuantizedValue(99); //no active step LED
     return 0;
   }
-  
-  if(abs(input-lastInput) >= 2)
-  {
-    lastInput = input;
-  } else return lastQuantValue;
-  
+
 	//quantize input value to all steps
 	/* instead of input/ADC_STEPS_PER_NOTE we use the magic number 17 here.
 	 * ADC_STEPS_PER_NOTE = 8.5 which will reult in a rounding error pretty quick
@@ -138,7 +138,7 @@ uint8_t quantizeValue(uint16_t input)
 	 * to bring the note values (played by keyboard fr example) in the middle of a step, 
 	 * thus increasing the note tracking over several octaves
 	 */
-	uint8_t quantValue = ((input<<1)+8)/17;//ADC_STEPS_PER_NOTE;
+	uint16_t quantValue = ((input<<1)+8)/17;//ADC_STEPS_PER_NOTE;
 
 	//calculate the current active step
 	uint8_t octave = quantValue/12;
@@ -150,7 +150,7 @@ uint8_t quantizeValue(uint16_t input)
 	int i=0;
 	for(;i<13;i++)
 	{
-	  if( ((1<<  ((note+i)%12) ) & io_getActiveSteps()) != 0) break;
+	  if( ((1<<  ((note+i)%12) ) & activeSteps) != 0) break;
 	}
 	
 	note = note+i;
@@ -170,23 +170,27 @@ uint8_t quantizeValue(uint16_t input)
 int main(void)
 {
     init();
-    
+
     //read last button state from eeprom
     io_setActiveSteps( eeprom_ReadBuffer());
-    
+
     while(1)
     {
-	//handle IOs (buttons + LED)		
-	io_processButtonsPipelined();
-	io_processLedPipelined();
+      //handle IOs (buttons + LED)		
+      io_processButtonsPipelined();
+      io_processLedPipelined();
 
-	checkAutosave();
-	if( !GATE_IN_CONNECTED )
-	{
-	  //no gate cable plugged in
-	  //continuous mode
-	  process();
-	}	
+      checkAutosave();
+
+      if(!GATE_IN_CONNECTED)
+      {
+        //no gate cable plugged in, run in continuous mode.
+        //seems safer to disable interrupts in case cable is plugged?
+        ATOMIC_BLOCK(ATOMIC_FORCEON)
+        {
+            process();
+        }
+      }
     }
 }
 //-----------------------------------------------------------
