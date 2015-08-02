@@ -45,6 +45,10 @@
 #define SWITCH_DDR_3		DDRC
 #define SWITCH_PORT_3		PORTC
 
+typedef uint8_t buttonState_t;
+#define BUTTON_STATE_PUSHED 0x80
+#define BUTTON_DEBOUNCE_MASK 0x0f
+
 // ------------ LEDs ------------
 #define LED_1_PIN		PC1
 #define LED_2_PIN		PC2

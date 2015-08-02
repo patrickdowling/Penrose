@@ -59,7 +59,7 @@ static const uint8_t ledPinArray[12][2] PROGMEM = {
 //-----------------------------------------------------------
 static uint16_t io_ledState=0xfff;		//state of the 12 LEDs == activated notes
 static uint8_t io_activeStep=2;			//current active quantisation step == currently played note
-static uint16_t io_lastButtonState=0x00;
+static buttonState_t io_lastButtonState[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
 //-----------------------------------------------------------
 void io_init()
 {
@@ -203,60 +203,86 @@ void io_processLedPipelined()
   if(ledState>=12) ledState=0;
 };
 //-----------------------------------------------------------
-//read button matrix 
+//Get new state for single button in row:col based on lastState
+//@return new buttons state
+static inline buttonState_t io_debounceButton( const uint8_t row, const uint8_t col, const buttonState_t lastState )
+{
+	buttonState_t state = lastState;
+	uint8_t val=0;
+
+	//all columns on
+	COL_PORT |= ( (1<<COL1_PIN) | (1<<COL2_PIN) | (1<<COL3_PIN) | (1<<COL4_PIN) );
+	//pin low for active column
+	COL_PORT &= ~(1<<col);
+
+	switch(row)
+	{
+		case 0:
+				val = (SWITCH_INPUT_12 & (1<<SWITCH_ROW1_PIN) ) == 0;
+				break;
+
+		case 1:
+				val = (SWITCH_INPUT_12 & (1<<SWITCH_ROW2_PIN) ) == 0;
+				break;
+
+		case 2:
+				val = (SWITCH_INPUT_3 & (1<<SWITCH_ROW3_PIN) ) == 0;
+				break;
+	}
+
+	// Add current pin state to debounce counter; changes in state should only
+	// happen when mask is full (rising edge) or empty (falling edge)
+	state = (( state << 1 ) | val ) & BUTTON_DEBOUNCE_MASK;
+
+	if ( (lastState & BUTTON_STATE_PUSHED) && (0 != state) )
+	{
+		 // was pushed already, but release debounce not met
+		state |= BUTTON_STATE_PUSHED;
+	}
+	else if ( state == BUTTON_DEBOUNCE_MASK )
+	{
+		// pushed (either new or held)
+		state |= BUTTON_STATE_PUSHED;
+	}
+	// else default to not pressed
+
+	return state;
+}
+//-----------------------------------------------------------
+//read button matrix
 void io_processButtons()
 {
 	uint8_t col;
 	uint8_t row;
 	uint8_t i=0;
-	uint16_t val;
-	
+	buttonState_t lastState, newState;
+
 	for(row=0;row<3;row++)
 	{
-	  for(col=0;col<4;col++)
-	  {
-		//all columns on
-		COL_PORT |= ( (1<<COL1_PIN) | (1<<COL2_PIN) | (1<<COL3_PIN) | (1<<COL4_PIN) );
-		//pin low for active column
-		COL_PORT &= ~(1<<col);
-		
-		//read active row input
-		switch(row)
+		for(col=0;col<4;col++)
 		{
-		  case 0:
-		      val = (SWITCH_INPUT_12 & (1<<SWITCH_ROW1_PIN) ) == 0;
-		      break;
-		  
-		  case 1:
-		      val = (SWITCH_INPUT_12 & (1<<SWITCH_ROW2_PIN) ) == 0;
-		      break;
-		    
-		  case 2:
-		      val = (SWITCH_INPUT_3 & (1<<SWITCH_ROW3_PIN) ) == 0;
-		      break;
-		}
-	    
-		//check if the button changed its state since the last call
-		if(   (io_lastButtonState&(1<<i))   != (val<<i)   )
-		{
-			//update state memory
-			io_lastButtonState &= ~(1<<i);
-			io_lastButtonState |=val<<i;
-			//toggle LED
-			if(val)
+			lastState = io_lastButtonState[i];
+			newState = io_debounceButton( row, col, lastState );
+
+			//check if the button changed its state since the last call
+			if ( (lastState ^ newState) & BUTTON_STATE_PUSHED )
 			{
-			  timer_touchAutosave();
-			  if(!(io_ledState&(1<<i)))
-			  {
-			    io_ledState |= 1<<i;
-			  } else 
-			  {
-			    io_ledState &= ~(1<<i);
-			  }
+				// Handle rising edge of push
+				if ( newState & BUTTON_STATE_PUSHED )
+				{
+					timer_touchAutosave();
+					//toggle LED
+					if (!(io_ledState&(1<<i)))
+						io_ledState |= (1<<i);
+					else
+						io_ledState &= ~(1<<i);
+				}
 			}
+
+			//update state memory
+			io_lastButtonState[i] = newState;
+			++i;
 		}
-		i++;
-	  }
 	}
 };
 //-----------------------------------------------------------
@@ -266,51 +292,28 @@ static uint8_t ledNr = 0;
 
 void io_processButtonsPipelined()
 {
-	uint8_t i= ledNr;
-	uint16_t val;
-	  
-	//all columns on
-	COL_PORT |= ( (1<<COL1_PIN) | (1<<COL2_PIN) | (1<<COL3_PIN) | (1<<COL4_PIN) );
-	//pin low for active column
-	COL_PORT &= ~(1<<buttonColIndex);
-	
-	//read active row input
-	switch(buttonRowIndex)
-	{
-	  default:
-	  case 0:
-	      val = (SWITCH_INPUT_12 & (1<<SWITCH_ROW1_PIN) ) == 0;
-	      break;
-	  
-	  case 1:
-	      val = (SWITCH_INPUT_12 & (1<<SWITCH_ROW2_PIN) ) == 0;
-	      break;
-	    
-	  case 2:
-	      val = (SWITCH_INPUT_3 & (1<<SWITCH_ROW3_PIN) ) == 0;
-	      break;
-	}
-    
+	buttonState_t lastState, newState;
+
+	lastState = io_lastButtonState[ ledNr ];
+	newState = io_debounceButton( buttonRowIndex, buttonColIndex, lastState );
+
 	//check if the button changed its state since the last call
-	if(   (io_lastButtonState&(1<<i))   != (val<<i)   )
+	if ( (lastState ^ newState) & BUTTON_STATE_PUSHED )
 	{
-		//update state memory
-		io_lastButtonState &= ~(1<<i);
-		io_lastButtonState |=val<<i;
-		//toggle LED
-		if(val)
+		// Handle rising edge of push
+		if ( newState & BUTTON_STATE_PUSHED )
 		{
-		  timer_touchAutosave();
-		  if(!(io_ledState&(1<<i)))
-		  {
-		    io_ledState |= 1<<i;
-		  } else 
-		  {
-		    io_ledState &= ~(1<<i);
-		  }
+			timer_touchAutosave();
+			//toggle LED
+			if (!(io_ledState&(1<<ledNr)))
+				io_ledState |= (1<<ledNr);
+			else
+				io_ledState &= ~(1<<ledNr);
 		}
 	}
-	
+
+	//update state memory
+	io_lastButtonState[ ledNr ] = newState;
 	ledNr++;
 	
 	buttonColIndex++;
