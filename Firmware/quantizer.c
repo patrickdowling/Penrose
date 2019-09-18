@@ -115,7 +115,7 @@ ISR(PCINT2_vect)
     return;	
 };
 //-----------------------------------------------------------
-static uint8_t lastInput=0;
+static uint16_t lastInput=0;
 uint8_t quantizeValue(uint16_t input)
 {
   if(io_getActiveSteps()==0)
