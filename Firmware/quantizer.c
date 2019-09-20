@@ -27,6 +27,7 @@
 #include "IoMatrix.h"
 #include "eeprom.h"
 #include "timebase.h"
+#include <util/atomic.h>
 #include <util/delay.h> 
 #include <avr/interrupt.h>  
 #include <stdlib.h>
@@ -185,7 +186,9 @@ int main(void)
 	{
 	  //no gate cable plugged in
 	  //continuous mode
-	  process();
+	  ATOMIC_BLOCK(ATOMIC_FORCEON) {
+	 	process();
+	  }
 	}	
     }
 }
