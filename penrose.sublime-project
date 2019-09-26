@@ -1,0 +1,88 @@
+{
+    "folders":
+    [
+        {
+            "path": "/usr/lib/avr/include",
+            "file_include_patterns":
+            [
+                "avr/boot.h",
+                "avr/builtins.h",
+                "avr/common.h",
+                "avr/cpufunc.h",
+                "avr/crc16.h",
+                "avr/delay.h",
+                "avr/eeprom.h",
+                "avr/fuse.h",
+                "avr/interrupt.h",
+                "avr/io.h",
+                "avr/iom168p.h",
+                "avr/lock.h",
+                "avr/parity.h",
+                "avr/pgmspace.h",
+                "avr/portpins.h",
+                "avr/power.h",
+                "avr/sfr_defs.h",
+                "avr/signal.h",
+                "avr/signature.h",
+                "avr/sleep.h",
+                "avr/version.h",
+                "avr/wdt.h",
+                "avr/xmega.h",
+                "util/*",
+            ],
+        },
+        {
+            "path": ".",
+            "folder_exclude_patterns":
+            [
+                "build",
+                "boilermake",
+            ],
+        }
+    ],
+
+    "settings":
+    {
+        "trim_trailing_white_space_on_save": true,
+    },
+
+    "build_systems":
+    [
+        {
+            "name": "make app",
+            "shell_cmd": "make -j",
+            "file_regex": "^\\s*([^:]+):(\\d+):(\\d+):\\s*(.+)$",
+            "syntax": "Packages/Makefile/Make Output.sublime-syntax",
+            "working_dir": "$project_path",
+            "variants":
+            [
+                {
+                    "name": "clean",
+                    "shell_cmd": "make mostlyclean_app.elf",
+                },
+                {
+                    "name": "run",
+                    "shell_cmd": "make -j play",
+                },
+            ],
+        },
+        {
+            "name": "make tests",
+            "shell_cmd": "make -j tests",
+            "file_regex": "^\\s*([^:]+):(\\d+):(\\d+):\\s*(.+)$",
+            "syntax": "Packages/Makefile/Make Output.sublime-syntax",
+            "working_dir": "$project_path",
+            "variants":
+            [
+                {
+                    "name": "clean",
+                    "shell_cmd": "make mostlyclean_test",
+                },
+                {
+                    "name": "run",
+                    "shell_cmd": "make -j check",
+                },
+            ],
+        },
+    ]
+}
