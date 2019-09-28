@@ -26,7 +26,9 @@ refactored.
 
 - Ported everything to c++.
 - Moved to a sample-rate-based architecture instead of loop-based. The sample
-  rate is 8 kHz, and the theoretical maximum is 10 kHz (limited by the ADC).
+  rate is 8 kHz, and the theoretical maximum is 12 kHz (limited by the ADC).
+- Changed the quantizer behavior to find the nearest enabled note, instead of
+  the nearest higher.
 - Optimized drivers.
 - Fixed a lot of bugs, some that caused crashing and some that only caused
   misbehavior.
