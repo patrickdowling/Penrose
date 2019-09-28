@@ -78,20 +78,6 @@ static uint8_t ProcessQuantizer(uint16_t enabled_notes, uint16_t adc_code)
     return Quantize(enabled_notes, adc_code);
 }
 
-static void ProcessDAC(uint8_t dac_code)
-{
-    if (dac_code != prev_dac_code)
-    {
-        dac::BeginWrite(dac_code);
-        gate_counter.Start();
-        prev_dac_code = dac_code;
-    }
-    else if (gate_counter.Tick())
-    {
-        dac::FinishWrite();
-    }
-}
-
 static uint16_t ProcessUI(void)
 {
     bool touch = button::Scan();
@@ -138,9 +124,21 @@ void ADCCallback(uint16_t sample)
             led::SetActive(pitch::Note(pitch));
         }
 
-        ProcessDAC(pitch * kDACLSBsPerSemitone);
+        uint8_t dac_code = pitch * kDACLSBsPerSemitone;
+
+        if (dac_code != prev_dac_code)
+        {
+            dac::BeginWrite(dac_code);
+            gate_counter.Start();
+            prev_dac_code = dac_code;
+        }
 
         prof::clear(prof::DSP_PROCESS);
+    }
+
+    if (gate_counter.Tick())
+    {
+        dac::FinishWrite();
     }
 
     prof::clear(prof::SAMPLE_INTERRUPT);
